@@ -88,6 +88,7 @@ where
             has_id.has_id.contains(&external_id)
         }
         Condition::Filter(_) => unreachable!(),
+        Condition::Nested(_) => unreachable!(),
     };
 
     check_filter(&checker, query)
@@ -134,6 +135,52 @@ pub fn check_field_condition(field_condition: &FieldCondition, payload: &Payload
                 .map_or(false, |condition| condition.check(p));
     }
     res
+}
+
+/// Return inner payload paths matching the condition
+pub fn nested_check_field_condition(
+    field_condition: &FieldCondition,
+    payload: &Payload,
+    nested_path: &str,
+) -> Vec<String> {
+    let full_path = format!("{}.{}", nested_path, field_condition.key);
+    let field_values = payload.get_value(&full_path);
+
+    let mut paths = vec![];
+
+    for (index, p) in field_values.values().iter().enumerate() {
+        let mut res = false;
+        // ToDo: Convert onto iterator over checkers, so it would be impossible to forget a condition
+        res = res
+            || field_condition
+                .r#match
+                .as_ref()
+                .map_or(false, |condition| condition.check(p));
+        res = res
+            || field_condition
+                .range
+                .as_ref()
+                .map_or(false, |condition| condition.check(p));
+        res = res
+            || field_condition
+                .geo_radius
+                .as_ref()
+                .map_or(false, |condition| condition.check(p));
+        res = res
+            || field_condition
+                .geo_bounding_box
+                .as_ref()
+                .map_or(false, |condition| condition.check(p));
+        res = res
+            || field_condition
+                .values_count
+                .as_ref()
+                .map_or(false, |condition| condition.check(p));
+        if res {
+            paths.push(index.to_string()); // TODO full_path or local path?
+        }
+    }
+    paths
 }
 
 pub struct SimpleConditionChecker {
